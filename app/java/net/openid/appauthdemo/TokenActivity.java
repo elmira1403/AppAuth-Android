@@ -24,6 +24,9 @@ import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.MainThread;
 import androidx.annotation.Nullable;
 import androidx.annotation.WorkerThread;
@@ -66,13 +69,13 @@ public class TokenActivity extends AppCompatActivity {
 
     private static final String KEY_USER_INFO = "userInfo";
 
-    private static final int END_SESSION_REQUEST_CODE = 911;
-
     private AuthorizationService mAuthService;
     private AuthStateManager mStateManager;
     private final AtomicReference<JSONObject> mUserInfoJson = new AtomicReference<>();
     private ExecutorService mExecutor;
     private Configuration mConfiguration;
+
+    private ActivityResultLauncher<Intent> endSessionActivityResultLauncher;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -99,6 +102,10 @@ public class TokenActivity extends AppCompatActivity {
                         .setConnectionBuilder(config.getConnectionBuilder())
                         .build());
 
+        endSessionActivityResultLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> onEndSessionResultReceived(result.getResultCode()));
+
         setContentView(R.layout.activity_token);
         displayLoading("Restoring state...");
 
@@ -108,6 +115,16 @@ public class TokenActivity extends AppCompatActivity {
             } catch (JSONException ex) {
                 Log.e(TAG, "Failed to parse saved user info JSON, discarding", ex);
             }
+        }
+    }
+
+    private void onEndSessionResultReceived(int resultCode) {
+        if (resultCode == Activity.RESULT_OK) {
+            signOut();
+            finish();
+
+        } else {
+            displayEndSessionCancelled();
         }
     }
 
@@ -375,17 +392,6 @@ public class TokenActivity extends AppCompatActivity {
         });
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode == END_SESSION_REQUEST_CODE && resultCode == Activity.RESULT_OK) {
-            signOut();
-            finish();
-        } else {
-            displayEndSessionCancelled();
-        }
-    }
-
     private void displayEndSessionCancelled() {
         Snackbar.make(findViewById(R.id.coordinator),
             "Sign out canceled",
@@ -412,7 +418,7 @@ public class TokenActivity extends AppCompatActivity {
                         .setIdTokenHint(currentState.getIdToken())
                         .setPostLogoutRedirectUri(mConfiguration.getEndSessionRedirectUri())
                         .build());
-            startActivityForResult(endSessionIntent, END_SESSION_REQUEST_CODE);
+            endSessionActivityResultLauncher.launch(endSessionIntent);
         } else {
             signOut();
         }
