@@ -32,6 +32,9 @@ import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
+
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.AnyThread;
 import androidx.annotation.ColorRes;
 import androidx.annotation.MainThread;
@@ -83,7 +86,6 @@ public final class LoginActivity extends AppCompatActivity {
 
     private static final String TAG = "LoginActivity";
     private static final String EXTRA_FAILED = "failed";
-    private static final int RC_AUTH = 100;
 
     private AuthorizationService mAuthService;
     private AuthStateManager mAuthStateManager;
@@ -96,6 +98,8 @@ public final class LoginActivity extends AppCompatActivity {
     private ExecutorService mExecutor;
 
     private boolean mUsePendingIntents;
+
+    private ActivityResultLauncher<Intent> authActivityResultLauncher;
 
     @NonNull
     private BrowserMatcher mBrowserMatcher = AnyBrowserMatcher.INSTANCE;
@@ -115,6 +119,10 @@ public final class LoginActivity extends AppCompatActivity {
             finish();
             return;
         }
+
+        authActivityResultLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            result -> onAuthResultReceived(result.getResultCode(), result.getData()));
 
         setContentView(R.layout.activity_login);
 
@@ -146,6 +154,18 @@ public final class LoginActivity extends AppCompatActivity {
         mExecutor.submit(this::initializeAppAuth);
     }
 
+    private void onAuthResultReceived(int resultCode, Intent data) {
+        displayAuthOptions();
+        if (resultCode == RESULT_CANCELED) {
+            displayAuthCancelled();
+
+        } else {
+            Intent intent = new Intent(this, TokenActivity.class);
+            intent.putExtras(data.getExtras());
+            startActivity(intent);
+        }
+    }
+
     @Override
     protected void onStart() {
         super.onStart();
@@ -166,19 +186,6 @@ public final class LoginActivity extends AppCompatActivity {
 
         if (mAuthService != null) {
             mAuthService.dispose();
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        displayAuthOptions();
-        if (resultCode == RESULT_CANCELED) {
-            displayAuthCancelled();
-        } else {
-            Intent intent = new Intent(this, TokenActivity.class);
-            intent.putExtras(data.getExtras());
-            startActivity(intent);
         }
     }
 
@@ -365,7 +372,7 @@ public final class LoginActivity extends AppCompatActivity {
             Intent intent = mAuthService.getAuthorizationRequestIntent(
                     mAuthRequest.get(),
                     mAuthIntent.get());
-            startActivityForResult(intent, RC_AUTH);
+            authActivityResultLauncher.launch(intent);
         }
     }
 
